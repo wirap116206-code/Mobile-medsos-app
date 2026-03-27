@@ -1,98 +1,123 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  RefreshControl,
+  Text,
+  View,
+} from "react-native";
+import React, { useEffect, useState } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
+import ListPost from "@/components/ListPost";
+import Header from "@/components/Header";
+// import { useAuthStore } from "@/stores/authStore";
+import customAPI from "@/config/api";
+import { Feed } from "@/types/Feed";
+import { Feather } from "@expo/vector-icons";
+import { collors } from "@/utils/collor";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+const Home = () => {
+  // const { token, user } = useAuthStore();
+  const [loading, setLoading] = useState(false);
+  const [postData, setPostData] = useState<Feed[]>([]);
+  const [page, setPage] = useState(1);
+  const [refreshing, setRefreshing] = useState(false);
+  const [totalPage, setTotalPage] = useState(1);
 
-export default function HomeScreen() {
+  const isEnd = page > totalPage;
+
+  const fetchFeed = async (pageNumber = page) => {
+    try {
+      if (loading) return;
+      if (pageNumber > totalPage) return;
+
+      setLoading(true);
+
+      const { data } = await customAPI.get(`/feed?page=${pageNumber}&limit=3`);
+
+      setPostData((prev) => {
+        const newPosts = data.data.filter(
+          (post: Feed) => !prev.some((p) => p.id === post.id),
+        );
+
+        return [...prev, ...newPosts];
+      });
+
+      setTotalPage(data.totalPages);
+      setPage(pageNumber + 1);
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+
+    setPostData([]);
+    setPage(1);
+
+    await fetchFeed(1);
+
+    setRefreshing(false);
+  };
+
+  useEffect(() => {
+    fetchFeed();
+  }, []);
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <SafeAreaView className="bg-background flex-1">
+      <Header />
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      <FlatList
+        data={postData}
+        keyExtractor={(item) => item.id.toString()}
+        showsVerticalScrollIndicator={false}
+        renderItem={({ item }) => (
+          <ListPost item={item} onReload={handleRefresh} />
+        )}
+        className="mt-4"
+        onEndReached={() => fetchFeed()}
+        onEndReachedThreshold={0.5}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+        ListEmptyComponent={
+          !loading ? (
+            <View className="items-center">
+              <Text className="text-xl font-semibold text-gray-400">
+                Tidak ada Postingan
+              </Text>
+              <Text className="text-sm my-2 text-gray-400">
+                Silahkan Follow User lain dihalaman Search{" "}
+                <Feather name="search" size={15} color="#fff" />
+              </Text>
+            </View>
+          ) : null
+        }
+        ListFooterComponent={() => {
+          if (loading) {
+            return (
+              <ActivityIndicator size="large" style={{ marginVertical: 20 }} color={collors.primary} />
+            );
+          }
+
+          if (isEnd && postData.length > 0) {
+            return (
+              <View className="items-center pb-36">
+                <Text className="text-gray-400">
+                  Semua Post sudah tampil 🐱
+                </Text>
+              </View>
+            );
+          }
+
+          return null;
+        }}
+      />
+    </SafeAreaView>
   );
-}
+};
 
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-});
+export default Home;
